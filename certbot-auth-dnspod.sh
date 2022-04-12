@@ -6,7 +6,7 @@
 # Renew:  certbot renew --manual-auth-hook /path/to/certbot-auth-dnspod.sh
 #
 
-# https://www.dnspod.cn/console/user/security
+# https://www.dnspod.com/console/user/security
 API_TOKEN=""
 
 USER_AGENT="AnDNS/1.0.0 (hi@anlo.ng)"
@@ -42,26 +42,35 @@ echo "\
 CERTBOT_DOMAIN: $CERTBOT_DOMAIN
 DOMAIN:         $DOMAIN
 TXHOST:         $TXHOST
-VALIDATION:     $CERTBOT_VALIDATION"
+VALIDATION:     $CERTBOT_VALIDATION
+API_TOKEN:      $API_TOKEN
+"
 #echo "PARAMS:         $PARAMS"
 
 RECORD_PATH="/tmp/CERTBOT_$CERTBOT_DOMAIN"
 RECORD_FILE="$RECORD_PATH/RECORD_ID_$CERTBOT_VALIDATION"
 
+DOMAIN_ID=$(curl -s -X POST "https://api.dnspod.com/Domain.Info" \
+          -H "User-Agent: $USER_AGENT" \
+          -d "$PARAMS&domain=$DOMAIN" \
+      | python -c "import sys,json;ret=json.load(sys.stdin);print(ret.get('domain',{}).get('id', ret.get('status',{}).get('message','error')))")
+
+echo "DOMAIN_ID: $DOMAIN_ID"
+
 if [ "$1" = "clean" ]; then
     RECORD_ID=$(cat $RECORD_FILE)
     if [ -n "$RECORD_ID" ]; then
-      APIRET=$(curl -s -X POST "https://dnsapi.cn/Record.Remove" \
+      APIRET=$(curl -s -X POST "https://api.dnspod.com/Record.Remove" \
           -H "User-Agent: $USER_AGENT" \
-          -d "$PARAMS&domain=$DOMAIN&record_id=$RECORD_ID" \
+          -d "$PARAMS&domain_id=$DOMAIN_ID&record_id=$RECORD_ID" \
       | python -c "import sys,json;ret=json.load(sys.stdin);print(ret.get('status',{}).get('message','error'))")
       echo "Remove Record: $RECORD_ID - $APIRET"
     fi
     rm -f $RECORD_FILE
 else
-    RECORD_ID=$(curl -s -X POST "https://dnsapi.cn/Record.Create" \
+    RECORD_ID=$(curl -s -X POST "https://api.dnspod.com/Record.Create" \
         -H "User-Agent: $USER_AGENT" \
-        -d "$PARAMS&domain=$DOMAIN&sub_domain=$TXHOST&record_type=TXT&value=$CERTBOT_VALIDATION&record_line=默认" \
+        -d "$PARAMS&domain_id=$DOMAIN_ID&sub_domain=$TXHOST&record_type=TXT&value=$CERTBOT_VALIDATION&record_line=默认" \
     | python -c "import sys,json;ret=json.load(sys.stdin);print(ret.get('record',{}).get('id',ret.get('status',{}).get('message','error')))")
 
     # Save info for cleanup
